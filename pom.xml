@@ -10,7 +10,7 @@
         <version>3.2.0</version> <!-- 使用最新稳定版 -->
     </parent>
 
-    <groupId>org.zjgsu.microserce.pjt</groupId>
+    <groupId>com.zjgsu.pjt</groupId>
     <artifactId>SchoolFunction</artifactId>
     <version>1.0-SNAPSHOT</version>
 
@@ -28,6 +28,13 @@
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
 
+
+        <!-- SpringDoc OpenAPI 核心依赖（生成 OpenAPI 规范） -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+            <version>2.3.0</version> <!-- 版本可适配 Spring Boot 3.4.x（作业推荐版本） -->
+        </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
