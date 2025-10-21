@@ -3,4 +3,4 @@ server:
 
 logging:
   level:
-    com.zjsu.zm.course: INFO
+    com.zjsu.pjt.course: INFO
