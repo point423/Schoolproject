@@ -1,6 +1,14 @@
-server:
-  port: 8080
-
-logging:
-  level:
-    com.zjsu.pjt.course: INFO
+spring:
+  profiles:
+    active: dev  # 默认激活开发环境，生产环境启动时指定：--spring.profiles.active=prod
+  # 数据初始化配置（仅dev环境生效）
+  sql:
+    init:
+      mode: embedded  # 仅嵌入式数据库（H2）自动执行初始化脚本
+      schema-locations: classpath:db/schema.sql  # 建表脚本路径
+      data-locations: classpath:db/data.sql  # 测试数据脚本路径
+  http:
+    encoding:
+          force-response: true
+          charset: UTF-8
+          enabled: true

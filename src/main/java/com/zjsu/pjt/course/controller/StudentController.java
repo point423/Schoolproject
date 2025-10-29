@@ -1,13 +1,10 @@
 package com.zjsu.pjt.course.controller;
 
-import com.zjsu.pjt.course.common.Response;
+import com.zjsu.pjt.course.common.BusinessException;
 import com.zjsu.pjt.course.model.Student;
 import com.zjsu.pjt.course.service.StudentService;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,48 +20,40 @@ import java.util.List;
 public class StudentController {
     private final StudentService studentService;
 
-    // 1. 创建学生 POST /api/students
+    // 新增学生
     @PostMapping
-    @Operation(summary = "创建学生", description = "新增学生信息，系统自动生成学生ID和创建时间，HTTP请求方式为POST")
-    public ResponseEntity<Response<Student>> createStudent(@Valid @RequestBody Student student) {
-        Student createdStudent = studentService.createStudent(student);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Response.success("Student created successfully", createdStudent));
+    public ResponseEntity<Student> createStudent(@RequestBody Student student) {
+        return ResponseEntity.status(201).body(studentService.createStudent(student));
     }
 
-    // 2. 查询所有学生 GET /api/students
-    @GetMapping
-    @Operation(summary = "查询所有学生", description = "获取系统中所有学生的列表，HTTP请求方式为GET")
-    public ResponseEntity<Response<List<Student>>> getAllStudents() {
-        List<Student> students = studentService.getAllStudents();
-        return ResponseEntity.ok(Response.success(students));
-    }
-
-    // 3. 根据ID查询学生 GET /api/students/{id}
+    // 按ID查询学生
     @GetMapping("/{id}")
-    @Operation(summary = "查询单个学生", description = "根据学生ID查询学生详情，学生不存在时返回404，HTTP请求方式为GET")
-    public ResponseEntity<Response<Student>> getStudentById(@PathVariable String id) {
-        Student student = studentService.getStudentById(id);
-        return ResponseEntity.ok(Response.success(student));
+    public ResponseEntity<Student> getStudentById(@PathVariable String id) {
+        return ResponseEntity.ok(studentService.getStudentById(id));
     }
 
-    // 4. 更新学生 PUT /api/students/{id}
+    // 按专业筛选学生
+    @GetMapping("/major/{major}")
+    public ResponseEntity<List<Student>> getStudentsByMajor(@PathVariable String major) {
+        return ResponseEntity.ok(studentService.getStudentsByMajor(major));
+    }
+
+    // 更新学生
     @PutMapping("/{id}")
-    @Operation(summary = "更新学生", description = "根据学生ID全量更新学生信息，更新学号时需校验唯一性，HTTP请求方式为PUT")
-    public ResponseEntity<Response<Student>> updateStudent(
-            @PathVariable String id,
-            @Valid @RequestBody Student student
-    ) {
-        Student updatedStudent = studentService.updateStudent(id, student);
-        return ResponseEntity.ok(Response.success(updatedStudent));
+    public ResponseEntity<Student> updateStudent(@PathVariable String id, @RequestBody Student student) {
+        return ResponseEntity.ok(studentService.updateStudent(id, student));
     }
 
-    // 5. 删除学生 DELETE /api/students/{id}
+    // 删除学生
     @DeleteMapping("/{id}")
-    @Operation(summary = "删除学生", description = "根据学生ID删除学生信息，存在选课记录时禁止删除，HTTP请求方式为DELETE")
-    public ResponseEntity<Response<Void>> deleteStudent(@PathVariable String id) {
+    public ResponseEntity<Void> deleteStudent(@PathVariable String id) {
         studentService.deleteStudent(id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(Response.success());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 全局异常处理
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<String> handleBusinessException(BusinessException e) {
+        return ResponseEntity.status(e.getStatus()).body(e.getMessage());
     }
 }

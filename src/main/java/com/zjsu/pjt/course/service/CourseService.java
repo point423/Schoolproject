@@ -1,11 +1,13 @@
 package com.zjsu.pjt.course.service;
 
 import com.zjsu.pjt.course.common.BusinessException;
-import com.zjsu.pjt.course.common.ResourceNotFoundException;
 import com.zjsu.pjt.course.model.Course;
 import com.zjsu.pjt.course.repository.CourseRepository;
+
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -15,67 +17,99 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class CourseService {
-    // 注入课程仓库
     private final CourseRepository courseRepository;
-
-    // 查询所有课程
-    public List<Course> getAllCourses() {
-        return courseRepository.findAll();
-    }
-
-    // 根据ID查询课程
-    public Course getCourseById(String id) {
-        // 若不存在，抛资源不存在异常
-        return courseRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Course", id));
-    }
-
-    // 创建课程
+    private final EnrollmentService enrollmentService; // 注入选课服务
+    /**
+     * 新增课程（校验课程代码唯一性）
+     */
+    @Transactional
     public Course createCourse(Course course) {
-        // 校验课程编码唯一性（可选，防止重复）
+        // 校验课程代码是否已存在
         if (courseRepository.existsByCode(course.getCode())) {
-            throw new BusinessException("课程编码已存在：" + course.getCode());
+            throw new BusinessException("课程代码已存在：" + course.getCode(), HttpStatus.CONFLICT);
+        }
+        // 初始化已选人数为0
+        if (course.getEnrolled() == null) {
+            course.setEnrolled(0);
         }
         return courseRepository.save(course);
     }
 
-    // 更新课程
-    public Course updateCourse(String id, Course course) {
-        // 先查课程是否存在
-        getCourseById(id); // 不存在会抛异常
-        // 设置课程ID（确保更新的是指定ID的课程）
-        course.setId(id);
-        return courseRepository.update(course);
+    /**
+     * 按ID查询课程（不存在则返回404）
+     */
+    public Course getCourseById(String id) {
+        return courseRepository.findById(id)
+                .orElseThrow(() -> new BusinessException("课程不存在：ID=" + id, HttpStatus.NOT_FOUND));
     }
 
-    // 删除课程
+    /**
+     * 筛选有剩余容量的课程
+     */
+    public List<Course> getCoursesWithRemainingCapacity() {
+        return courseRepository.findByEnrolledLessThanCapacity();
+    }
+
+    /**
+     * 更新课程信息（不允许修改课程代码）
+     */
+    @Transactional
+    public Course updateCourse(String id, Course updateCourse) {
+        Course existingCourse = getCourseById(id);
+        // 禁止修改课程代码
+        if (!existingCourse.getCode().equals(updateCourse.getCode())) {
+            throw new BusinessException("不允许修改课程代码", HttpStatus.BAD_REQUEST);
+        }
+        // 更新允许修改的字段
+        existingCourse.setTitle(updateCourse.getTitle());
+        existingCourse.setInstructor(updateCourse.getInstructor());
+        existingCourse.setSchedule(updateCourse.getSchedule());
+        existingCourse.setCapacity(updateCourse.getCapacity());
+        // 已选人数不能大于新容量
+        if (updateCourse.getEnrolled() != null && updateCourse.getEnrolled() > existingCourse.getCapacity()) {
+            throw new BusinessException("已选人数不能大于课程容量", HttpStatus.BAD_REQUEST);
+        }
+        if (updateCourse.getEnrolled() != null) {
+            existingCourse.setEnrolled(updateCourse.getEnrolled());
+        }
+        return courseRepository.save(existingCourse);
+    }
+
+    /**
+     * 删除课程（校验是否有关联选课记录，此处简化，实际需关联EnrollmentService）
+     */
+    @Transactional
     public void deleteCourse(String id) {
-        // 先查课程是否存在
-        getCourseById(id);
-        courseRepository.deleteById(id);
+        Course course = getCourseById(id);
+        // 校验是否有关联选课记录
+        if (enrollmentService.hasEnrollmentsForCourse(id)) {
+            throw new BusinessException("该课程存在选课记录，无法删除", HttpStatus.CONFLICT);
+        }
+        courseRepository.delete(course);
     }
 
-    // 选课时更新课程已选人数（自增）
+    /**
+     * 课程选课人数自增（事务保证，避免超容）
+     */
+    @Transactional
     public void incrementEnrolled(String courseId) {
         Course course = getCourseById(courseId);
-        // 校验容量（防止超容，实际业务在选课Service中已校验，此处双重保险）
         if (course.getEnrolled() >= course.getCapacity()) {
-            throw new BusinessException("课程容量已满：" + course.getTitle());
+            throw new BusinessException("课程容量已满：" + course.getTitle(), HttpStatus.CONFLICT);
         }
         course.setEnrolled(course.getEnrolled() + 1);
-        courseRepository.update(course);
+        courseRepository.save(course);
     }
 
-    // 退课时更新课程已选人数（自减）
+    /**
+     * 课程选课人数自减（事务保证）
+     */
+    @Transactional
     public void decrementEnrolled(String courseId) {
         Course course = getCourseById(courseId);
-        // 已选人数不能小于0
-        if (course.getEnrolled() <= 0) {
-            course.setEnrolled(0);
-            courseRepository.update(course);
-            return;
+        if (course.getEnrolled() > 0) {
+            course.setEnrolled(course.getEnrolled() - 1);
+            courseRepository.save(course);
         }
-        course.setEnrolled(course.getEnrolled() - 1);
-        courseRepository.update(course);
     }
 }

@@ -1,13 +1,10 @@
 package com.zjsu.pjt.course.controller;
 
-import com.zjsu.pjt.course.common.Response;
+import com.zjsu.pjt.course.common.BusinessException;
 import com.zjsu.pjt.course.model.Course;
 import com.zjsu.pjt.course.service.CourseService;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,48 +20,40 @@ import java.util.List;
 public class CourseController {
     private final CourseService courseService;
 
-    // 1. 查询所有课程 GET /api/courses
-    @GetMapping
-    @Operation(summary = "查询所有课程", description = "获取系统中所有课程的列表，HTTP请求方式为GET")
-    public ResponseEntity<Response<List<Course>>> getAllCourses() {
-        List<Course> courses = courseService.getAllCourses();
-        return ResponseEntity.ok(Response.success(courses));
-    }
-
-    // 2. 查询单个课程 GET /api/courses/{id}
-    @GetMapping("/{id}")
-    @Operation(summary = "查询单个课程", description = "根据课程ID查询课程详情，HTTP请求方式为GET")
-    public ResponseEntity<Response<Course>> getCourseById(@PathVariable String id) {
-        Course course = courseService.getCourseById(id);
-        return ResponseEntity.ok(Response.success(course));
-    }
-
-    // 3. 创建课程 POST /api/courses
+    // 新增课程
     @PostMapping
-    @Operation(summary = "创建课程", description = "新增课程信息，系统自动生成课程ID，HTTP请求方式为POST")
-    public ResponseEntity<Response<Course>> createCourse(@Valid @RequestBody Course course) {
-        Course createdCourse = courseService.createCourse(course);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Response.success("Course created successfully", createdCourse));
+    public ResponseEntity<Course> createCourse(@RequestBody Course course) {
+        return ResponseEntity.status(201).body(courseService.createCourse(course));
     }
 
-    // 4. 更新课程 PUT /api/courses/{id}
+    // 按ID查询课程
+    @GetMapping("/{id}")
+    public ResponseEntity<Course> getCourseById(@PathVariable String id) {
+        return ResponseEntity.ok(courseService.getCourseById(id));
+    }
+
+    // 筛选有剩余容量的课程
+    @GetMapping("/available")
+    public ResponseEntity<List<Course>> getAvailableCourses() {
+        return ResponseEntity.ok(courseService.getCoursesWithRemainingCapacity());
+    }
+
+    // 更新课程
     @PutMapping("/{id}")
-    @Operation(summary = "更新课程", description = "根据课程ID全量更新课程信息，HTTP请求方式为PUT")
-    public ResponseEntity<Response<Course>> updateCourse(
-            @PathVariable String id,
-            @Valid @RequestBody Course course
-    ) {
-        Course updatedCourse = courseService.updateCourse(id, course);
-        return ResponseEntity.ok(Response.success(updatedCourse));
+    public ResponseEntity<Course> updateCourse(@PathVariable String id, @RequestBody Course course) {
+        return ResponseEntity.ok(courseService.updateCourse(id, course));
     }
 
-    // 5. 删除课程 DELETE /api/courses/{id}
+    // 删除课程
     @DeleteMapping("/{id}")
-    @Operation(summary = "删除课程", description = "根据课程ID删除课程信息，HTTP请求方式为DELETE")
-    public ResponseEntity<Response<Void>> deleteCourse(@PathVariable String id) {
+    public ResponseEntity<Void> deleteCourse(@PathVariable String id) {
         courseService.deleteCourse(id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(Response.success());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 全局异常处理（业务异常返回对应HTTP状态码）
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<String> handleBusinessException(BusinessException e) {
+        return ResponseEntity.status(e.getStatus()).body(e.getMessage());
     }
 }

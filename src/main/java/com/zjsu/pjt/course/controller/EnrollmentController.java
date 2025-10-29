@@ -1,13 +1,10 @@
 package com.zjsu.pjt.course.controller;
 
-import com.zjsu.pjt.course.common.Response;
+import com.zjsu.pjt.course.common.BusinessException;
 import com.zjsu.pjt.course.model.Enrollment;
 import com.zjsu.pjt.course.service.EnrollmentService;
-import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
-import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -23,45 +20,37 @@ import java.util.List;
 public class EnrollmentController {
     private final EnrollmentService enrollmentService;
 
-    // 1. 学生选课 POST /api/enrollments
+    // 学生选课
     @PostMapping
-    @Operation(summary = "学生选课", description = "学生选择课程，需校验课程容量和重复选课，HTTP请求方式为POST")
-    public ResponseEntity<Response<Enrollment>> enrollCourse(@Valid @RequestBody Enrollment enrollment) {
-        Enrollment enrolled = enrollmentService.enrollCourse(enrollment);
-        return ResponseEntity.status(HttpStatus.CREATED)
-                .body(Response.success("Enrolled successfully", enrolled));
+    public ResponseEntity<Enrollment> enrollCourse(@RequestBody Enrollment enrollment) {
+        return ResponseEntity.status(201).body(enrollmentService.enrollCourse(enrollment));
     }
 
-    // 2. 学生退课 DELETE /api/enrollments/{id}
-    @DeleteMapping("/{id}")
-    @Operation(summary = "学生退课", description = "根据选课记录ID删除选课信息，HTTP请求方式为DELETE")
-    public ResponseEntity<Response<Void>> dropCourse(@PathVariable String id) {
-        enrollmentService.dropCourse(id);
-        return ResponseEntity.status(HttpStatus.NO_CONTENT)
-                .body(Response.success());
+    // 学生退课（按课程ID和学生ID）
+    @DeleteMapping
+    public ResponseEntity<Void> dropCourse(
+            @RequestParam String courseId,
+            @RequestParam String studentId
+    ) {
+        enrollmentService.dropCourse(courseId, studentId);
+        return ResponseEntity.noContent().build();
     }
 
-    // 3. 查询所有选课记录 GET /api/enrollments
-    @GetMapping
-    @Operation(summary = "查询所有选课记录", description = "获取系统中所有的选课记录列表，HTTP请求方式为GET")
-    public ResponseEntity<Response<List<Enrollment>>> getAllEnrollments() {
-        List<Enrollment> enrollments = enrollmentService.getAllEnrollments();
-        return ResponseEntity.ok(Response.success(enrollments));
-    }
-
-    // 4. 按课程查询选课记录 GET /api/enrollments/course/{courseId}
+    // 按课程ID查询活跃选课记录
     @GetMapping("/course/{courseId}")
-    @Operation(summary = "按课程查询选课记录", description = "根据课程ID查询该课程的所有选课记录，HTTP请求方式为GET")
-    public ResponseEntity<Response<List<Enrollment>>> getEnrollmentsByCourseId(@PathVariable String courseId) {
-        List<Enrollment> enrollments = enrollmentService.getEnrollmentsByCourseId(courseId);
-        return ResponseEntity.ok(Response.success(enrollments));
+    public ResponseEntity<List<Enrollment>> getActiveEnrollmentsByCourseId(@PathVariable String courseId) {
+        return ResponseEntity.ok(enrollmentService.getActiveEnrollmentsByCourseId(courseId));
     }
 
-    // 5. 按学生查询选课记录 GET /api/enrollments/student/{studentId}
-    @GetMapping("/student/{studentId}")
-    @Operation(summary = "按学生查询选课记录", description = "根据学生ID查询该学生的所有选课记录，HTTP请求方式为GET")
-    public ResponseEntity<Response<List<Enrollment>>> getEnrollmentsByStudentId(@PathVariable String studentId) {
-        List<Enrollment> enrollments = enrollmentService.getEnrollmentsByStudentId(studentId);
-        return ResponseEntity.ok(Response.success(enrollments));
+    // 统计课程活跃人数
+    @GetMapping("/course/{courseId}/count")
+    public ResponseEntity<Integer> countActiveEnrollments(@PathVariable String courseId) {
+        return ResponseEntity.ok(enrollmentService.countActiveEnrollments(courseId));
+    }
+
+    // 全局异常处理
+    @ExceptionHandler(BusinessException.class)
+    public ResponseEntity<String> handleBusinessException(BusinessException e) {
+        return ResponseEntity.status(e.getStatus()).body(e.getMessage());
     }
 }

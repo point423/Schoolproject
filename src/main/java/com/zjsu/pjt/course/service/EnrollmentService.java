@@ -2,12 +2,17 @@ package com.zjsu.pjt.course.service;
 
 import com.zjsu.pjt.course.common.BusinessException;
 import com.zjsu.pjt.course.common.ResourceNotFoundException;
+import com.zjsu.pjt.course.enums.EnrollmentStatus;
 import com.zjsu.pjt.course.model.Course;
 import com.zjsu.pjt.course.model.Enrollment;
 import com.zjsu.pjt.course.model.Student;
+import com.zjsu.pjt.course.repository.CourseRepository;
 import com.zjsu.pjt.course.repository.EnrollmentRepository;
+import com.zjsu.pjt.course.repository.StudentRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
@@ -17,88 +22,95 @@ import java.util.List;
 @Service
 @RequiredArgsConstructor
 public class EnrollmentService {
-    // 注入三个仓库和课程、学生服务（业务校验用）
     private final EnrollmentRepository enrollmentRepository;
-    private final CourseService courseService;
-    private final StudentService studentService;
+    private final CourseRepository courseRepository;
+    private final StudentRepository studentRepository;
 
-    // 查询所有选课记录
-    public List<Enrollment> getAllEnrollments() {
-        return enrollmentRepository.findAll();
-    }
-
-    // 根据ID查询选课记录
-    public Enrollment getEnrollmentById(String id) {
-        return enrollmentRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Enrollment", id));
-    }
-
-    // 根据课程ID查询选课记录
-    public List<Enrollment> getEnrollmentsByCourseId(String courseId) {
-        // 校验课程是否存在
-        courseService.getCourseById(courseId);
-        return enrollmentRepository.findByCourseId(courseId);
-    }
-
-    // 根据学生ID（UUID）查询选课记录
-    public List<Enrollment> getEnrollmentsByStudentId(String studentId) {
-        // 校验学生是否存在
-        studentService.getStudentById(studentId);
-        return enrollmentRepository.findByStudentId(studentId);
-    }
-
-    // 学生选课（核心业务）
+    /**
+     * 学生选课（核心业务：校验课程容量、避免重复选课）
+     */
+    @Transactional
     public Enrollment enrollCourse(Enrollment enrollment) {
-        String courseId = enrollment.getCourseId();
-        String studentId = enrollment.getStudentId(); // 学生的UUID（非学号）
+        // 1. 校验课程和学生是否存在（直接通过 Repository 实现，不依赖其他 Service）
+        Course course = courseRepository.findById(enrollment.getCourseId())
+                .orElseThrow(() -> new ResourceNotFoundException("课程不存在",enrollment.getCourseId()));
+        Student student = studentRepository.findById(enrollment.getStudentId())
+                .orElseThrow(() -> new ResourceNotFoundException("学生不存在",enrollment.getCourseId()));
 
-        // 1. 校验课程是否存在
-        Course course = courseService.getCourseById(courseId);
-
-        // 2. 校验学生是否存在
-        Student student = studentService.getStudentById(studentId);
-
-        // 3. 校验是否重复选课
-        if (enrollmentRepository.existsByCourseIdAndStudentId(courseId, studentId)) {
-            throw new BusinessException("学生" + student.getStudentId() + "已选该课程：" + course.getTitle());
+        // 2. 校验是否已选该课程（原逻辑不变）
+        if (enrollmentRepository.existsByCourseIdAndStudentId(enrollment.getCourseId(), enrollment.getStudentId())) {
+            throw new BusinessException("学生已选该课程", HttpStatus.CONFLICT);
         }
 
-        // 4. 校验课程容量
+        // 3. 校验课程容量（调用 CourseService 的 incrementEnrolled 方法，这里需要保留对 CourseService 的依赖吗？）
         if (course.getEnrolled() >= course.getCapacity()) {
-            throw new BusinessException("课程" + course.getTitle() + "容量已满（当前：" + course.getEnrolled() + "/" + course.getCapacity() + "）");
+            throw new BusinessException("课程容量已满", HttpStatus.BAD_REQUEST);
         }
+        course.setEnrolled(course.getEnrolled() + 1);
+        courseRepository.save(course);
 
-        // 5. 保存选课记录
-        Enrollment savedEnrollment = enrollmentRepository.save(enrollment);
-
-        // 6. 更新课程已选人数（自增）
-        courseService.incrementEnrolled(courseId);
-
-        return savedEnrollment;
+        // 4. 设置选课状态为ACTIVE，保存选课记录
+        enrollment.setStatus(EnrollmentStatus.ACTIVE);
+        return enrollmentRepository.save(enrollment);
     }
 
-    // 学生退课
-    public void dropCourse(String id) {
-        // 1. 校验选课记录是否存在
-        Enrollment enrollment = getEnrollmentById(id);
-        String courseId = enrollment.getCourseId();
+    /**
+     * 学生退课（核心业务：更新课程已选人数、修改选课状态）
+     */
+    @Transactional
+    public void dropCourse(String courseId, String studentId) {
+        // 1. 校验选课记录是否存在（原逻辑不变）
+        Enrollment enrollment = enrollmentRepository.findByCourseIdAndStudentId(courseId, studentId)
+                .orElseThrow(() -> new BusinessException("选课记录不存在", HttpStatus.NOT_FOUND));
 
-        // 2. 删除选课记录
-        enrollmentRepository.deleteById(id);
+        // 2. 校验是否已退课（原逻辑不变）
+        if (enrollment.getStatus() == EnrollmentStatus.DROPPED) {
+            throw new BusinessException("学生已退该课程", HttpStatus.BAD_REQUEST);
+        }
 
-        // 3. 更新课程已选人数（自减）
-        courseService.decrementEnrolled(courseId);
+        // 3. 修改选课状态为DROPPED，课程已选人数自减（直接操作 Repository）
+        enrollment.setStatus(EnrollmentStatus.DROPPED);
+        enrollmentRepository.save(enrollment);
+
+        Course course = courseRepository.findById(courseId).get(); // 前面已校验过存在，直接get()
+        course.setEnrolled(course.getEnrolled() - 1);
+        courseRepository.save(course);
+    }
+    /**
+     * 按课程ID查询活跃选课记录（修改后）
+     */
+    public List<Enrollment> getActiveEnrollmentsByCourseId(String courseId) {
+        // 校验课程是否存在：直接通过CourseRepository实现，替代courseService.getCourseById()
+        courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("课程不存在",courseId));
+        // 原查询逻辑不变
+        return enrollmentRepository.findByCourseIdAndStatus(courseId, EnrollmentStatus.ACTIVE);
     }
 
-    // 根据课程ID和学生ID退课（可选，用于特殊场景）
-    public void dropCourseByCourseIdAndStudentId(String courseId, String studentId) {
-        // 校验选课记录是否存在
-        if (!enrollmentRepository.existsByCourseIdAndStudentId(courseId, studentId)) {
-            throw new BusinessException("学生未选该课程");
-        }
-        // 删除选课记录
-        enrollmentRepository.deleteByCourseIdAndStudentId(courseId, studentId);
-        // 更新课程已选人数
-        courseService.decrementEnrolled(courseId);
+    /**
+     * 统计课程活跃人数（修改后）
+     */
+    public Integer countActiveEnrollments(String courseId) {
+        // 同样直接通过Repository校验课程存在
+        courseRepository.findById(courseId)
+                .orElseThrow(() -> new ResourceNotFoundException("课程不存在",courseId));
+        // 原统计逻辑不变
+        return enrollmentRepository.countActiveByCourseId(courseId, EnrollmentStatus.ACTIVE);
+    }
+
+    // 校验关联记录的方法（hasEnrollmentsForCourse/Student）不变...
+
+    /**
+     * 检查课程是否存在关联的选课记录
+     */
+    public boolean hasEnrollmentsForCourse(String courseId) {
+        return enrollmentRepository.existsByCourseId(courseId);
+    }
+
+    /**
+     * 检查学生是否存在关联的选课记录
+     */
+    public boolean hasEnrollmentsForStudent(String studentId) {
+        return enrollmentRepository.existsByStudentId(studentId);
     }
 }

@@ -1,0 +1,21 @@
+spring:
+  # H2 内存数据库配置
+  datasource:
+    url: jdbc:h2:mem:course_db;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+  h2:
+    console:
+      enabled: true  # 开启H2控制台
+      path: /h2-console  # 控制台访问路径
+  # JPA 配置
+  jpa:
+    hibernate:
+      ddl-auto: update  # dev环境自动更新表结构
+    show-sql: true  # 显示SQL日志
+    properties:
+      hibernate:
+        format_sql: true  # 格式化SQL
+        dialect: org.hibernate.dialect.H2Dialect  # H2方言
+    open-in-view: false
