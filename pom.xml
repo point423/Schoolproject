@@ -87,5 +87,7 @@
                 <version>3.2.0</version>
             </plugin>
         </plugins>
-    </build>
+    </build><!--这个插件是 Spring Boot 项目的 “标配”，没有它，你可能需要手动处理依赖打包、
+    启动类配置等繁琐工作。有了它，只需简单的 Maven 命令就能完成项目的构建、运行和部署，极大简化了开发流程。
+-->
 </project>
