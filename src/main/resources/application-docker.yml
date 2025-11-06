@@ -1,0 +1,26 @@
+spring:
+  datasource:
+    # 使用环境变量注入（与docker-compose.yml一致）
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+  jpa:
+    hibernate:
+      ddl-auto: update  # 自动创建/更新表结构
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQL8Dialect
+        format_sql: true
+    show-sql: true
+
+# 日志级别配置
+logging:
+  level:
+    root: INFO
+    org.springframework.web: INFO
+    com.zjsu.pjt.course: DEBUG
+
+# 应用端口（与Dockerfile暴露的一致）
+server:
+  port: 8080
